@@ -1,0 +1,12 @@
+name: youtube_trends
+title: youtube_trends
+username:
+account: andrewdarmawant
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 1751753
+bundleId: 2782533
+url: https://andrewdarmawant.shinyapps.io/youtube_trends/
+when: 1581086631.96519
+asMultiple: FALSE
+asStatic: FALSE
