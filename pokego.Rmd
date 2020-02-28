@@ -1,0 +1,127 @@
+---
+title: "pokego"
+author: "Andrew D"
+date: "15/02/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(GGally)
+```
+
+# Curiosity question
+
+I was wondering on how to get the max combat point for a pokemon based on its attributes.
+
+# Data set
+
+```{r}
+pogo_og <- read.csv("pokmon-go-dataset-15-generations/pogo original uncut data source.csv")
+
+pogo_og <- pogo_og %>% 
+  select(-c("Pokedex", "Name"))
+
+intrain <- sample(nrow(pogo_og), nrow(pogo_og)*0.8)
+pogo <- pogo_og[intrain, ]
+pogo_test <- pogo_og[-intrain, ]
+```
+
+#data clean up
+
+# check correlation
+```{r}
+ggcorr(data = pogo, label = T)
+```
+
+#create a model 
+
+```{r}
+model_pogo_all <- lm(formula = MaxCP~., data = pogo)
+model_pogo_all
+```
+
+```{r}
+summary(model_pogo_all)
+```
+
+```{r}
+model_pogo_none <- lm(formula = MaxCP~1, data = pogo)
+
+
+step(object = model_pogo_none, scope = list(lower = model_pogo_none, upper = model_pogo_all ) ,direction = "forward", trace = 0)
+step(object = model_pogo_all, direction = "backward", trace = 0)
+step(object = model_pogo_all, scope = list(lower = model_pogo_none, upper = model_pogo_all ) ,direction = "both", trace = 0)
+```
+
+```{r}
+model_pogo_forward <- lm(formula = MaxCP ~ Attack + Defense + MaxHP + Legendary + Weight + 
+    Height, data = pogo)
+
+model_pogo_backward <- lm(formula = MaxCP ~ Stamina + Attack + Defense + Weight + Height + 
+    Legendary, data = pogo)
+
+model_pogo_both <- lm(formula = MaxCP ~ Stamina + Attack + Defense + Weight + Height + 
+    Legendary, data = pogo)
+
+```
+
+```{r}
+summary(model_pogo_forward)$adj.r.squared
+summary(model_pogo_backward)$adj.r.squared
+summary(model_pogo_both)$adj.r.squared
+```
+```{r}
+best_pogo_model <- lm(formula = MaxCP ~ Stamina + Attack + Defense + Weight + Height + 
+    Legendary, data = pogo)
+
+summary(best_pogo_model)
+```
+
+# cek asumsi
+
+## test normalitas
+
+```{r}
+shapiro.test(x = best_pogo_model$residuals)
+```
+karena p-value<alpha, residual tidak berdistribusi normal
+
+## test homoscedascity
+```{r}
+library(lmtest)
+bptest(best_pogo_model)
+```
+Karena p-value < alpha, variasi error ada pola
+
+```{r}
+plot( best_pogo_model$fitted.values, best_pogo_model$residuals)
+abline(h = 0, col = "red")
+```
+## test multicolinearity
+
+```{r}
+library(car)
+vif(best_pogo_model)
+```
+karena vif< 10, tidak ada colinearity
+
+2/4 asumsi terpenuhi sehingga dapat dibilang model kurang sukses
+
+# test prediksi
+
+```{r}
+predict_cp <- predict(object = best_pogo_model, newdata = pogo_test, interval = "confidence", level = 0.95)
+```
+
+```{r}
+library(MLmetrics)
+MSE(y_pred = predict_cp ,y_true = pogo_test$MaxCP)
+RMSE(y_pred = predict_cp,y_true = pogo_test$MaxCP)
+```
+
