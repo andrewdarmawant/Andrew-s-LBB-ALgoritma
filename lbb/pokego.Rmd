@@ -1,0 +1,144 @@
+---
+title: "pokego"
+author: "Andrew D"
+date: "15/02/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r,include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(GGally)
+library(lmtest)
+library(car)
+library(MLmetrics)
+```
+
+# Curiosity question
+
+Pokemon Go is a popular game that uses Augmented Reality technology to engage its audience to move around and collect creaturs called Pokemon. The goal of the game is to collect the most pokemon, train them then battle them with other pokemon trainers.
+Each pokemon is unique and have their own strengths and weaknesses. Their ability or strength is measured by the symbol CP(Combat Point). I was wondering on how to predict the max combat point for a pokemon based on its attributes.
+
+The goal(target variable): MaxCP
+
+# Data set
+The first thing needed to be done is to clean up the data.
+```{r}
+pogo_og <- read.csv("dataset/pokmon-go-dataset-15-generations/pogo original uncut data source.csv")
+
+pogo_og <- pogo_og %>% 
+  select(-c("Pokedex", "Name"))
+
+intrain <- sample(nrow(pogo_og), nrow(pogo_og)*0.8)
+pogo <- pogo_og[intrain, ]
+pogo_test <- pogo_og[-intrain, ]
+```
+
+#data clean up
+
+# check correlation
+```{r}
+ggcorr(data = pogo, label = T)
+```
+From the graph above, we can see that MaxCP is heavily influenced by MaxHP, Defencse, Attack and Stamina. So these might be some of the predictor variables in measuring the CP.
+
+#create a model 
+
+We can check how MaxCP is predicted using all the variables.
+
+```{r}
+model_pogo_all <- lm(formula = MaxCP~., data = pogo)
+model_pogo_all
+```
+
+```{r}
+summary(model_pogo_all)
+```
+The summary above shows that not all of the predictor variables are necessary. Therefore, a "cleaner" model should be made.
+
+The following is using a function to create the best model according to the `step()` function. We will use all three types to secure the best model.
+```{r}
+model_pogo_none <- lm(formula = MaxCP~1, data = pogo)
+
+step(object = model_pogo_none, scope = list(lower = model_pogo_none, upper = model_pogo_all ) ,direction = "forward", trace = 0)
+step(object = model_pogo_all, direction = "backward", trace = 0)
+step(object = model_pogo_all, scope = list(lower = model_pogo_none, upper = model_pogo_all ) ,direction = "both", trace = 0)
+```
+Each of the `step()` function has provided the best model according to its functions.
+
+We will save these models into a variable.
+```{r}
+model_pogo_forward <- lm(formula = MaxCP ~ Attack + Defense + MaxHP + Legendary + Weight + 
+    Height, data = pogo)
+
+model_pogo_backward <- lm(formula = MaxCP ~ Stamina + Attack + Defense + Weight + Height + 
+    Legendary, data = pogo)
+
+model_pogo_both <- lm(formula = MaxCP ~ Stamina + Attack + Defense + Weight + Height + 
+    Legendary, data = pogo)
+
+```
+
+To find the model with the least error, I used summary and find its adjusted r-squared. The higher the r-squared, the more the data is explained by the predictor variables.
+```{r}
+summary(model_pogo_forward)$adj.r.squared
+summary(model_pogo_backward)$adj.r.squared
+summary(model_pogo_both)$adj.r.squared
+```
+From the numbers above, it is found that the model from the step function that uses backward or both function to have the highest value for adjusted r-squared. Therefore they are the best models.
+
+```{r}
+best_pogo_model <- lm(formula = MaxCP ~ Stamina + Attack + Defense + Weight + Height + 
+    Legendary, data = pogo)
+
+summary(best_pogo_model)
+```
+Checking the summary to see how the predictor variables are all significant which is visible through the *.
+
+# cek asumption
+
+## Normality test
+
+```{r}
+shapiro.test(x = best_pogo_model$residuals)
+```
+Since the p-value < alpha, the Residual is not distributed normally.
+
+## Homoscedascity test 
+```{r}
+bptest(best_pogo_model)
+```
+Because the p-value < alpha, there is a pattern in the variance of error.
+
+This is visualized below
+```{r}
+plot( best_pogo_model$fitted.values, best_pogo_model$residuals)
+abline(h = 0, col = "red")
+```
+
+## Multicolinearity test 
+
+```{r}
+vif(best_pogo_model)
+```
+Because all the values of vif < 10, there are no predictor that are colinear
+
+## conclusion
+Since only 2 of 4 assumptions are fulfilled, the model may not be considered to be the best linear unbiased estimator(BLUE)
+However, the model is still acceptable
+
+# test prediksi
+After creating the model, I will now predict the best cp monster
+```{r}
+predict_cp <- predict(object = best_pogo_model, newdata = pogo_test, interval = "confidence", level = 0.95)
+```
+
+```{r}
+MSE(y_pred = predict_cp ,y_true = pogo_test$MaxCP)
+RMSE(y_pred = predict_cp,y_true = pogo_test$MaxCP)
+```
+The error is big which means taht the model can be improved using other methods
